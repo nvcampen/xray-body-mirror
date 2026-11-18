@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>X-Ray Body Mirror</title>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
+<style>
+  :root { --bg:#080b12; --panel:#121725; --line:#252c41; --fg:#eef1f8; --dim:#8b95b2; --accent:#7fd1ff; --ok:#57d98a; --bad:#ff5d73; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; min-height:100%; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { display:flex; gap:20px; padding:20px; justify-content:center; align-items:flex-start; }
+  .stagecol { flex:1 1 auto; min-width:0; display:flex; justify-content:center; }
+  .stage { position:relative; width:min(100%, calc((100vh - 40px) * var(--ar, 1.7778))); aspect-ratio:var(--ar, 1.7778);
+           background:radial-gradient(ellipse at 50% 40%, #121a2c, #04060b 75%); border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+  .stage video, .stage canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+  #video { object-fit:cover; transform:scaleX(-1); }
+  #shade, #gl { transform:scaleX(-1); pointer-events:none; }
+  #hud { pointer-events:none; }
+  #intro { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-align:center; padding:24px; }
+  #intro h2 { margin:0; font-size:30px; letter-spacing:.05em; font-weight:800; }
+  #intro p { margin:0; color:var(--dim); max-width:48ch; }
+  .btns { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  button.big { font:inherit; font-weight:700; font-size:16px; color:#06121c; background:var(--accent); border:0; border-radius:12px; padding:12px 20px; cursor:pointer; }
+  button.big.ghost { background:transparent; color:var(--fg); border:1px solid var(--line); }
+  button.big:disabled { opacity:.6; cursor:default; }
+  aside { flex:0 0 330px; display:flex; flex-direction:column; gap:12px; }
+  h1 { margin:0; font-size:22px; letter-spacing:.03em; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:13px 15px; }
+  .panel h3 { margin:0 0 9px; font-size:12px; font-weight:600; color:var(--dim); text-transform:uppercase; letter-spacing:.09em; }
+  #status { font-weight:600; font-size:14px; }
+  #status.ok { color:var(--ok); } #status.bad { color:var(--bad); }
+  #fps { font:12px ui-monospace,Menlo,Consolas,monospace; color:var(--dim); margin-top:4px; }
+  .chips { display:flex; flex-wrap:wrap; gap:7px; }
+  .chips button, .seg button { font:inherit; font-size:13px; color:var(--fg); background:#0a0e17; border:1px solid var(--line); border-radius:9px; padding:7px 11px; cursor:pointer; }
+  .chips button:hover, .seg button:hover { border-color:var(--accent); }
+  .seg { display:flex; gap:7px; }
+  .seg button { flex:1; }
+  .seg button.on { background:var(--accent); color:#06121c; border-color:var(--accent); font-weight:700; }
+  .checks { display:grid; grid-template-columns:1fr 1fr; gap:7px 12px; margin-top:11px; }
+  label.ck { display:flex; align-items:center; gap:8px; font-size:14px; cursor:pointer; }
+  label.ck i { width:10px; height:10px; border-radius:50%; flex:none; }
+  input[type=checkbox] { width:17px; height:17px; margin:0; accent-color:var(--accent); }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:14px; margin-top:11px; }
+  .row:first-of-type { margin-top:0; }
+  .row input[type=range] { flex:1; max-width:52%; accent-color:var(--accent); }
+  select { font:inherit; font-size:14px; color:var(--fg); background:#0a0e17; border:1px solid var(--line); border-radius:8px; padding:6px 8px; }
+  .small { font-size:12px; color:var(--dim); margin:0; }
+  .small + .small { margin-top:8px; }
+  [hidden] { display:none !important; }
+  @media (max-width:900px) { .wrap { flex-direction:column; align-items:stretch; } aside { flex:none; } .stage { width:100%; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stagecol">
+    <div class="stage" id="stage">
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="shade"></canvas>
+      <canvas id="gl"></canvas>
+      <canvas id="hud"></canvas>
+      <div id="intro">
+        <h2>X-RAY BODY MIRROR</h2>
+        <p>Zie je skelet, spieren, organen en bloedvaten live over je eigen lichaam. Ga op 2 à 3 meter van de camera staan, zodat je volledig in beeld bent.</p>
+        <div class="btns">
+          <button class="big" id="start">Start camera</button>
+          <button class="big ghost" id="demo">Demo zonder camera</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside>
+    <h1>X-Ray Body Mirror</h1>
+    <div class="panel"><div id="status">Klik op Start camera en geef toegang tot je camera.</div><div id="fps"></div></div>
+
+    <div class="panel">
+      <h3>Lagen</h3>
+      <div class="chips">
+        <button data-preset="skeleton">Skelet</button>
+        <button data-preset="muscles">Spieren</button>
+        <button data-preset="organs">Organen</button>
+        <button data-preset="vessels">Bloedvaten</button>
+        <button data-preset="all">Alles</button>
+      </div>
+      <div class="checks" id="layerChecks"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Weergave</h3>
+      <div class="seg" id="style">
+        <button data-style="xray">Röntgen</button>
+        <button data-style="solid">Solide</button>
+      </div>
+      <div class="row" style="margin-top:12px"><label>Helderheid</label><input type="range" id="bright" min="0.3" max="2" step="0.05"></div>
+      <div class="row"><label>Camerabeeld op lichaam</label><input type="range" id="real" min="0" max="1" step="0.05"></div>
+      <div class="row"><label>Achtergrond dimmen</label><input type="range" id="dim" min="0" max="0.9" step="0.05"></div>
+      <div class="row"><label>Rust (minder trillen)</label><input type="range" id="steady" min="0" max="1" step="0.05"></div>
+      <div class="checks">
+        <label class="ck"><input type="checkbox" id="labels">Labels</label>
+        <label class="ck"><input type="checkbox" id="debug">Trackingpunten</label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Tracking</h3>
+      <div class="row"><label>Model</label>
+        <select id="model">
+          <option value="lite">Lite (snelst)</option>
+          <option value="full">Full (aangeraden)</option>
+          <option value="heavy">Heavy (nauwkeurigst)</option>
+        </select>
+      </div>
+      <p class="small" style="margin-top:10px">Video wordt op deze computer verwerkt en nergens naartoe gestuurd.</p>
+    </div>
+
+    <p class="small">Anatomie: BodyParts3D, © The Database Center for Life Science, CC BY 4.0, vereenvoudigd en gerigd voor deze app. Tracking: MediaPipe Pose. Rendering: three.js.</p>
+    <p class="small">Dit is een visualisatie op basis van een standaard referentielichaam, geen medische scan.</p>
+  </aside>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

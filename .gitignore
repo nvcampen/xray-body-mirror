@@ -1,0 +1,6 @@
+node_modules/
+.cache/
+work/
+# built by `npm run anatomy` and `npm run build` (and by GitHub Actions for the hosted site)
+assets/
+dist/
